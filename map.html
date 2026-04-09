@@ -199,9 +199,10 @@
 <div class="top-bar">
   <div id="topBarTeam" style="font-size:14px;"></div>
   <div class="top-bar-title">🎪 動物嘉年華</div>
-  <button class="top-bar-action" onclick="Broadcast.openMessages()" id="bellBtn">
-    🔔
-  </button>
+  <div style="display:flex;gap:4px;">
+    <button class="top-bar-action" onclick="Broadcast.openMessages()" id="bellBtn">🔔</button>
+    <button class="top-bar-action" onclick="showSettings()">⚙️</button>
+  </div>
 </div>
 
 <!-- GPS 狀態 -->
@@ -566,6 +567,41 @@
     if (document.getElementById('tabGames').classList.contains('active')) renderGameList();
     if (document.getElementById('tabAdventure').classList.contains('active')) renderAdventureList();
   });
+
+  // 設定 / 登出
+  function showSettings() {
+    MapEngine.showPopup(`
+      <div class="popup-header">⚙️ 設定</div>
+      <p style="font-size:14px;margin:8px 0;color:#666">
+        ${session.teamEmoji} ${session.name} · ${session.teamName}
+      </p>
+      <button class="btn btn-secondary btn-block" onclick="location.reload()" style="margin-bottom:8px">
+        🔄 重新整理頁面
+      </button>
+      <button class="btn btn-outline btn-block" onclick="clearCacheRefresh()" style="margin-bottom:8px">
+        🗑️ 清除快取並重整
+      </button>
+      <button class="btn btn-block" onclick="logoutConfirm()" style="background:#E53935;color:white;">
+        🚪 登出（切換帳號）
+      </button>
+    `);
+  }
+
+  function clearCacheRefresh() {
+    localStorage.removeItem('gameUnlocks');
+    Object.keys(localStorage).filter(k => k.startsWith('api_cache_')).forEach(k => localStorage.removeItem(k));
+    if ('caches' in window) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+    location.reload();
+  }
+
+  function logoutConfirm() {
+    if (confirm('確定要登出嗎？登出後需重新選擇隊伍')) {
+      Auth.logout();
+      localStorage.removeItem('gameUnlocks');
+      Object.keys(localStorage).filter(k => k.startsWith('api_cache_')).forEach(k => localStorage.removeItem(k));
+      window.location.href = 'index.html';
+    }
+  }
 
   // 點擊畫面時恢復音效
   document.addEventListener('touchstart', () => AudioEngine.resume(), { once: true });

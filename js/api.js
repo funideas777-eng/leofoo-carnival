@@ -131,7 +131,8 @@ const API = {
   getBaseUrl(endpoint) {
     if (endpoint === 'READ' || endpoint === 'getTeamRankings' || endpoint === 'getBroadcasts' ||
         endpoint === 'getGameLocations' || endpoint === 'getGameScores' ||
-        endpoint === 'getChat' || endpoint === 'getTeamLocations' || endpoint === 'getPlayerTasks') {
+        endpoint === 'getChat' || endpoint === 'getChat_team' || endpoint === 'getChat_world' ||
+        endpoint === 'getTeamLocations' || endpoint === 'getPlayerTasks') {
       return CONFIG.API.READ;
     }
     if (endpoint === 'getPendingPhotos' || endpoint === 'getDashboard') {

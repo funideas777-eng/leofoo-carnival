@@ -125,6 +125,7 @@
 
   // === GPS 停留驗證任務 ===
   function showGpsTask(adv, content) {
+    const isTesting = typeof TEST_MODE !== 'undefined' && TEST_MODE;
     content.innerHTML = `
       <div class="task-card">
         <div class="task-header">
@@ -139,7 +140,7 @@
         </p>
 
         <div class="gps-panel">
-          <div class="gps-distance" id="distDisplay">定位中...</div>
+          <div class="gps-distance" id="distDisplay">${isTesting ? '🧪 測試模式' : '定位中...'}</div>
           <div class="gps-label">距離設施</div>
           <div id="dwellSection" style="display:none;margin-top:12px;">
             <div class="gps-label">停留時間：<span id="dwellTime">0</span> / ${adv.dwellSeconds} 秒</div>
@@ -149,8 +150,8 @@
           </div>
         </div>
 
-        <button class="btn btn-primary btn-block" id="verifyBtn" disabled onclick="submitGpsVerification('${adv.id}')">
-          ⏳ 尚未到達設施範圍
+        <button class="btn ${isTesting ? 'btn-accent' : 'btn-primary'} btn-block" id="verifyBtn" ${isTesting ? '' : 'disabled'} onclick="submitGpsVerification('${adv.id}')">
+          ${isTesting ? '🧪 測試模式：直接驗證' : '⏳ 尚未到達設施範圍'}
         </button>
       </div>
     `;
@@ -225,6 +226,7 @@
 
   // === 拍照任務 ===
   function showPhotoTask(adv, content) {
+    const isTesting = typeof TEST_MODE !== 'undefined' && TEST_MODE;
     content.innerHTML = `
       <div class="task-card">
         <div class="task-header">
@@ -234,6 +236,7 @@
             <div class="task-points">🏆 ${adv.points} 分</div>
           </div>
         </div>
+        ${isTesting ? '<div style="background:#FFF3E0;padding:8px 12px;border-radius:8px;font-size:12px;color:#E65100;margin-bottom:8px;">🧪 測試模式：GPS 限制已解除</div>' : ''}
         <p style="font-size:14px;color:var(--text-light);margin-bottom:8px;">
           拍攝團隊照片，照片會自動加上活動邊框
         </p>

@@ -22,7 +22,7 @@ const Chat = {
       this.fetchMessages('world');
     };
     poll();
-    const interval = 8000 + Math.random() * 7000;
+    const interval = 4000 + Math.random() * 3000;
     this.pollTimer = setInterval(poll, interval);
   },
 
@@ -36,7 +36,8 @@ const Chat = {
         teamId: session.teamId,
         since: this.lastTimestamp[channel] || ''
       };
-      const data = await API.get('getChat', params, 5000);
+      // 不使用客戶端快取，確保即時性
+      const data = await API.get('getChat_' + channel, params, 0);
       if (data && data.messages && data.messages.length > 0) {
         data.messages.forEach(msg => {
           const exists = this.messages[channel].some(m => m.msgId === msg.msgId);

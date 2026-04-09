@@ -204,7 +204,7 @@ function handleGetTeamRankings() {
     .sort((a, b) => b.totalPoints - a.totalPoints);
 
   const result = { rankings };
-  scriptCache.put('teamRankings', JSON.stringify(result), 30);
+  scriptCache.put('teamRankings', JSON.stringify(result), 10);
   return result;
 }
 
@@ -378,8 +378,65 @@ function handleSubmitScore(body) {
   // 清除相關快取
   scriptCache.remove('scores_' + session.gameId);
   scriptCache.remove('teamRankings');
+  scriptCache.remove('teams');
+
+  // 即時更新團隊遊戲加分
+  try { updateGameBonusForGame(session.gameId); } catch(e) { /* non-critical */ }
 
   return { success: true };
+}
+
+// 單款遊戲的團隊加分即時更新
+function updateGameBonusForGame(gameId) {
+  const scoresSheet = getSheet('GameScores');
+  const scoresData = scoresSheet.getDataRange().getValues().slice(1);
+  const tpSheet = getSheet('TeamPoints');
+  const tpData = tpSheet.getDataRange().getValues();
+  const bonusPoints = [300, 200, 100];
+
+  // 刪除該遊戲的舊 game_bonus
+  for (let i = tpData.length - 1; i >= 1; i--) {
+    if (tpData[i][1] === 'game_bonus' && String(tpData[i][3]).startsWith(gameId + ' ')) {
+      tpSheet.deleteRow(i + 1);
+    }
+  }
+
+  // 取每隊最高分
+  const gameScores = scoresData.filter(row => row[3] === gameId);
+  const playerBest = {};
+  gameScores.forEach(row => {
+    const pid = row[0];
+    if (!playerBest[pid] || row[4] > playerBest[pid].score) {
+      playerBest[pid] = { score: row[4], teamId: row[2], playerName: row[1] };
+    }
+  });
+
+  const teamBest = {};
+  Object.entries(playerBest).forEach(([pid, info]) => {
+    const tid = info.teamId;
+    if (!teamBest[tid] || info.score > teamBest[tid].score) {
+      teamBest[tid] = { score: info.score, playerName: info.playerName, teamId: tid };
+    }
+  });
+
+  const sorted = Object.entries(teamBest)
+    .sort((a, b) => b[1].score - a[1].score)
+    .slice(0, 3);
+
+  sorted.forEach(([tid, info], idx) => {
+    tpSheet.appendRow([
+      info.teamId, 'game_bonus', bonusPoints[idx],
+      `${gameId} 第${idx + 1}名: ${info.playerName} (${info.score}分)`,
+      new Date().toISOString()
+    ]);
+  });
+
+  // 更新受影響的隊伍總分
+  const affectedTeams = new Set(sorted.map(([tid]) => parseInt(tid)));
+  affectedTeams.forEach(tid => updateTeamTotal(tid));
+
+  scriptCache.remove('teamRankings');
+  scriptCache.remove('teams');
 }
 
 function handleCompleteAdventure(body) {
@@ -501,10 +558,7 @@ function updateTeamTotal(teamId) {
 
 // === 聊天系統 ===
 function handleGetChat(channel, teamId, since) {
-  const cacheKey = 'chat_' + channel + '_' + (teamId || '') + '_' + (since || '0');
-  const cached = scriptCache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-
+  // 不使用伺服端快取，確保訊息即時傳遞
   const sheet = getSheet('Chat');
   if (!sheet) return { messages: [] };
   const data = sheet.getDataRange().getValues();
@@ -518,15 +572,13 @@ function handleGetChat(channel, teamId, since) {
     }))
     .filter(m => {
       if (new Date(m.timestamp) <= sinceDate) return false;
-      if (channel === 'team') return m.channel === 'team' && m.teamId === parseInt(teamId);
+      if (channel === 'team') return m.channel === 'team' && String(m.teamId) === String(teamId);
       return m.channel === 'world';
     })
     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
     .slice(-100);
 
-  const result = { messages };
-  scriptCache.put(cacheKey, JSON.stringify(result), 5);
-  return result;
+  return { messages };
 }
 
 function handleSendChat(body) {
@@ -540,10 +592,6 @@ function handleSendChat(body) {
     body.playerId, body.playerName, body.teamName,
     body.teamEmoji, body.content, new Date().toISOString()
   ]);
-
-  // 清除相關快取
-  scriptCache.remove('chat_world__0');
-  scriptCache.remove('chat_team_' + body.teamId + '_0');
 
   return { success: true, msgId };
 }
