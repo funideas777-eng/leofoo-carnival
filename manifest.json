@@ -4,6 +4,7 @@
   "description": "六福村600人團隊闖關活動系統",
   "start_url": "/leofoo-carnival/index.html",
   "display": "standalone",
+  "scope": "/leofoo-carnival/",
   "orientation": "portrait",
   "background_color": "#FF6B35",
   "theme_color": "#FF6B35",

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'leofoo-carnival-v4';
+const CACHE_NAME = 'leofoo-carnival-v5';
 const STATIC_ASSETS = [
   '/leofoo-carnival/index.html',
   '/leofoo-carnival/map.html',

@@ -94,6 +94,10 @@
       position: relative;
       z-index: 1;
     }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(8px); }
+    }
   </style>
 </head>
 <body>
@@ -248,24 +252,97 @@
     document.querySelector('[onclick="installApp()"]')?.parentElement?.remove();
   }
 
-  // iOS Safari 提示
-  if (/iPhone|iPad/.test(navigator.userAgent) && !window.navigator.standalone) {
+  // iOS 偵測
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+  // 偵測 in-app browser（LINE, Facebook, Instagram, WeChat 等）
+  const isInAppBrowser = /Line\/|FBAV\/|FBAN\/|Instagram|MicroMessenger|Twitter/i.test(navigator.userAgent);
+
+  if (isIOS && !isStandalone) {
     setTimeout(() => {
-      if (!document.querySelector('[onclick="installApp()"]')) {
+      if (isInAppBrowser) {
+        showOpenInSafariTip();
+      } else {
         showIOSInstallTip();
       }
-    }, 3000);
+    }, 1500);
   }
 
+  // 在 LINE/FB 等 in-app browser 中，提示用戶用 Safari 開啟
+  function showOpenInSafariTip() {
+    const tip = document.createElement('div');
+    tip.id = 'ios-tip';
+    tip.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:white;padding:20px 20px 28px;box-shadow:0 -4px 20px rgba(0,0,0,0.2);z-index:9999;border-radius:20px 20px 0 0;text-align:center;';
+    tip.innerHTML = `
+      <div style="font-size:36px;margin-bottom:8px">🌐</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:12px">請用 Safari 開啟</div>
+      <div style="font-size:13px;color:#666;line-height:1.8;margin-bottom:16px">
+        目前在應用程式內瀏覽器中，無法加入主畫面。<br>
+        請點擊右下角 <strong>「⋯」</strong> 或 <strong>「用瀏覽器開啟」</strong><br>
+        使用 <strong>Safari</strong> 開啟本頁面
+      </div>
+      <div style="background:#f5f5f5;border-radius:12px;padding:12px 16px;font-size:12px;color:#888;margin-bottom:16px;text-align:left;">
+        <div style="margin-bottom:6px"><strong>LINE：</strong>點右下角「⋯」→「在瀏覽器中開啟」</div>
+        <div style="margin-bottom:6px"><strong>Facebook：</strong>點右下角「⋯」→「用 Safari 開啟」</div>
+        <div><strong>Instagram：</strong>點右上角「⋯」→「在瀏覽器中開啟」</div>
+      </div>
+      <button onclick="copyURLToClipboard()" style="width:100%;background:var(--primary);color:white;border:none;border-radius:12px;padding:12px;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px">📋 複製網址，自行用 Safari 貼上開啟</button>
+      <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#999;font-size:13px;cursor:pointer;padding:8px">暫時不要</button>
+    `;
+    document.body.appendChild(tip);
+  }
+
+  function copyURLToClipboard() {
+    const url = window.location.href;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.querySelector('#ios-tip button');
+        if (btn) { btn.textContent = '✅ 已複製！請開啟 Safari 貼上網址'; btn.style.background = '#2EC4B6'; }
+      });
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      const btn = document.querySelector('#ios-tip button');
+      if (btn) { btn.textContent = '✅ 已複製！請開啟 Safari 貼上網址'; btn.style.background = '#2EC4B6'; }
+    }
+  }
+
+  // Safari 中顯示加入主畫面的步驟引導
   function showIOSInstallTip() {
     const tip = document.createElement('div');
-    tip.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:white;padding:16px 20px;box-shadow:0 -4px 20px rgba(0,0,0,0.15);z-index:999;border-radius:16px 16px 0 0;text-align:center;';
+    tip.id = 'ios-tip';
+    tip.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:white;padding:20px 20px 28px;box-shadow:0 -4px 20px rgba(0,0,0,0.2);z-index:9999;border-radius:20px 20px 0 0;text-align:center;';
     tip.innerHTML = `
-      <div style="font-weight:700;margin-bottom:8px">📲 加到主畫面</div>
-      <div style="font-size:13px;color:#666;margin-bottom:4px">點擊 Safari 下方 <strong style="font-size:18px">⬆</strong> 分享按鈕</div>
-      <div style="font-size:13px;color:#666">選擇「<strong>加入主畫面</strong>」即可像 App 使用</div>
-      <button onclick="this.parentElement.remove()" style="margin-top:12px;background:none;border:1px solid #ddd;border-radius:8px;padding:8px 20px;cursor:pointer;font-size:13px">知道了</button>
+      <div style="font-size:36px;margin-bottom:8px">📲</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:16px">加到主畫面，像 App 一樣開啟</div>
+      <div style="display:flex;gap:12px;margin-bottom:16px;text-align:center;">
+        <div style="flex:1;background:#f5f5f5;border-radius:12px;padding:12px 8px;">
+          <div style="font-size:28px;margin-bottom:4px">⬆️</div>
+          <div style="font-size:12px;font-weight:600;">步驟 1</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">點擊底部<br>分享按鈕</div>
+        </div>
+        <div style="flex:1;background:#f5f5f5;border-radius:12px;padding:12px 8px;">
+          <div style="font-size:28px;margin-bottom:4px">➕</div>
+          <div style="font-size:12px;font-weight:600;">步驟 2</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">選擇「加入<br>主畫面」</div>
+        </div>
+        <div style="flex:1;background:#f5f5f5;border-radius:12px;padding:12px 8px;">
+          <div style="font-size:28px;margin-bottom:4px">✅</div>
+          <div style="font-size:12px;font-weight:600;">步驟 3</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">點「新增」<br>完成安裝</div>
+        </div>
+      </div>
+      <div style="font-size:28px;animation:bounce 1s infinite">⬇️</div>
+      <div style="font-size:11px;color:#999;margin-top:4px">Safari 分享按鈕在螢幕最下方</div>
+      <button onclick="this.parentElement.remove();localStorage.setItem('ios-tip-dismissed','1')" style="margin-top:12px;background:none;border:1px solid #ddd;border-radius:10px;padding:10px 24px;cursor:pointer;font-size:13px;color:#666">知道了</button>
     `;
+    // 已經關閉過就不再顯示
+    if (localStorage.getItem('ios-tip-dismissed')) return;
     document.body.appendChild(tip);
   }
 </script>
