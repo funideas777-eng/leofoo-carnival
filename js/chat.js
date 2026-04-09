@@ -22,7 +22,8 @@ const Chat = {
       this.fetchMessages('world');
     };
     poll();
-    const interval = 4000 + Math.random() * 3000;
+    // 聊天每 3-5 秒輪詢
+    const interval = 3000 + Math.random() * 2000;
     this.pollTimer = setInterval(poll, interval);
   },
 

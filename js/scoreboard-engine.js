@@ -15,8 +15,8 @@ const ScoreboardEngine = {
   },
 
   startPolling() {
-    // 即時戰報：每 10-15 秒更新
-    const interval = 10000 + Math.random() * 5000;
+    // 即時戰報：每 5-8 秒更新
+    const interval = 5000 + Math.random() * 3000;
     this.pollTimer = setInterval(() => {
       if (!document.hidden) {
         if (this.currentTab === 'team') this.fetchTeamRankings();
@@ -31,7 +31,7 @@ const ScoreboardEngine = {
 
   async fetchTeamRankings() {
     try {
-      const data = await API.get('getTeamRankings', { action: 'getTeamRankings' }, 8000);
+      const data = await API.get('getTeamRankings', { action: 'getTeamRankings' }, 3000);
       if (data && data.rankings) {
         this.rankings = data.rankings;
         this.maxPoints = Math.max(...data.rankings.map(r => r.totalPoints), 1);
@@ -72,7 +72,7 @@ const ScoreboardEngine = {
 
   async fetchGameScores(gameId) {
     try {
-      const data = await API.get('getGameScores', { action: 'getGameScores', gameId, limit: 20 }, 8000);
+      const data = await API.get('getGameScores', { action: 'getGameScores', gameId, limit: 20 }, 3000);
       if (data && data.scores) {
         this.renderGameScores(data.scores, gameId);
       }

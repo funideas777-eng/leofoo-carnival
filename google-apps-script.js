@@ -184,7 +184,7 @@ function handleGetGameScores(gameId, limit) {
     .slice(0, limit);
 
   const result = { scores };
-  scriptCache.put(cacheKey, JSON.stringify(result), 15);
+  scriptCache.put(cacheKey, JSON.stringify(result), 5);
   return result;
 }
 
@@ -209,10 +209,7 @@ function handleGetTeamRankings() {
 }
 
 function handleGetBroadcasts(since) {
-  const cacheKey = 'broadcasts_' + (since || '0');
-  const cached = scriptCache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-
+  // 不快取廣播，確保即時送達
   const sheet = getSheet('Broadcasts');
   const data = sheet.getDataRange().getValues();
   const sinceDate = since ? new Date(since) : new Date(0);
@@ -229,9 +226,7 @@ function handleGetBroadcasts(since) {
     .filter(b => new Date(b.timestamp) > sinceDate)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-  const result = { broadcasts };
-  scriptCache.put(cacheKey, JSON.stringify(result), 10);
-  return result;
+  return { broadcasts };
 }
 
 function handleGetGameLocations() {

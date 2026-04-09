@@ -27,8 +27,8 @@ const Broadcast = {
   startPolling() {
     if (this.pollTimer) return;
     this.poll();
-    const interval = CONFIG.POLL.broadcastBase + Math.random() * CONFIG.POLL.broadcastJitter;
-    this.pollTimer = setInterval(() => this.poll(), interval);
+    // 廣播通知每 5-8 秒輪詢一次
+    this.pollTimer = setInterval(() => this.poll(), 5000 + Math.random() * 3000);
   },
 
   stopPolling() {
@@ -40,10 +40,11 @@ const Broadcast = {
 
   async poll() {
     try {
+      // 不使用客戶端快取，確保廣播即時送達
       const data = await API.get('getBroadcasts', {
         action: 'getBroadcasts',
         since: this.lastTimestamp
-      }, CONFIG.CACHE_TTL.broadcasts);
+      }, 0);
 
       if (data && data.broadcasts && data.broadcasts.length > 0) {
         data.broadcasts.forEach(msg => this.handleNewMessage(msg));
@@ -119,7 +120,16 @@ const Broadcast = {
     if (this.onUnreadChange) this.onUnreadChange(0);
     const panel = document.getElementById('message-panel');
     if (panel) {
-      panel.innerHTML = this.renderMessages();
+      panel.innerHTML = `
+        <div class="top-bar" style="position:sticky;top:0;z-index:10;">
+          <button class="top-bar-back" onclick="Broadcast.closeMessages()">← 返回</button>
+          <div class="top-bar-title">📢 活動訊息</div>
+          <div style="width:40px;"></div>
+        </div>
+        <div style="padding:16px;">
+          ${this.renderMessages()}
+        </div>
+      `;
       panel.classList.add('show');
     }
   },
@@ -131,7 +141,7 @@ const Broadcast = {
 
   renderMessages() {
     if (this.messages.length === 0) {
-      return '<div class="msg-empty">目前沒有訊息</div>';
+      return '<div class="msg-empty" style="text-align:center;color:#999;padding:60px 20px;">目前沒有訊息<br><span style="font-size:13px;">管理員發送的廣播會顯示在這裡</span></div>';
     }
     return this.messages.map(msg => `
       <div class="msg-item msg-${msg.type}">

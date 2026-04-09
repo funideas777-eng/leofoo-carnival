@@ -138,7 +138,7 @@ html, body {
   transform: translateY(100%);
   transition: transform 0.3s ease;
   overflow-y: auto;
-  padding: 60px 16px 100px;
+  padding: 0;
 }
 #message-panel.show { transform: translateY(0); }
 .msg-item {
