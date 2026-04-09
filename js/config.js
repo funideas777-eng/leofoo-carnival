@@ -2,6 +2,9 @@
 // 六福村動物嘉年華 - 核心設定檔
 // ============================================================
 
+// 測試模式：URL 加 ?test=1 解鎖全部遊戲/冒險
+const TEST_MODE = new URLSearchParams(window.location.search).has('test');
+
 const CONFIG = {
   // === 活動設定 ===
   eventName: '六福村動物嘉年華',

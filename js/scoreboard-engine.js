@@ -87,31 +87,67 @@ const ScoreboardEngine = {
     const game = getGameById(gameId);
     const session = Auth.getSession();
     const myId = session ? session.playerId : '';
+    const myTeamId = session ? session.teamId : -1;
 
     if (scores.length === 0) {
       container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-light)">目前沒有紀錄</div>';
       return;
     }
 
-    container.innerHTML = scores.map((s, idx) => {
+    // 取每隊最高分作為代表（團隊排名用）
+    const teamBest = {};
+    scores.forEach(s => {
+      if (!teamBest[s.teamId] || s.score > teamBest[s.teamId].score) {
+        teamBest[s.teamId] = s;
+      }
+    });
+    const teamRanked = Object.values(teamBest).sort((a, b) => b.score - a.score);
+
+    // 團隊代表排名
+    let html = '<div style="font-size:13px;color:var(--text-light);margin-bottom:12px;font-weight:600">📊 團隊代表排名（每隊最高分）</div>';
+    html += teamRanked.map((s, idx) => {
       const rank = idx + 1;
       const rankClass = rank <= 3 ? ` top${rank}` : '';
-      const isMe = s.playerId === myId;
+      const team = CONFIG.TEAMS.find(t => t.id === s.teamId);
+      const isMyTeam = s.teamId === myTeamId;
       const trophy = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
       const bonus = rank <= 3 ? `<span style="font-size:11px;color:var(--secondary)">+${[300,200,100][rank-1]}隊分</span>` : '';
 
       return `
-        <div class="rank-item${isMe ? ' my-team' : ''}">
+        <div class="rank-item${isMyTeam ? ' my-team' : ''}">
           <div class="rank-number${rankClass}">${trophy || rank}</div>
-          <div class="rank-emoji">${game.icon}</div>
+          <div class="rank-emoji">${team ? team.emoji : game.icon}</div>
           <div style="flex:1">
-            <div class="rank-name">${s.playerName}${isMe ? ' (我)' : ''}</div>
+            <div class="rank-name">${team ? team.name : '隊伍' + s.teamId} · ${s.playerName}${s.playerId === myId ? ' (我)' : ''}</div>
             ${bonus}
           </div>
           <div class="rank-score">${s.score}</div>
         </div>
       `;
     }).join('');
+
+    // 個人排行（全部玩家）
+    html += '<div style="font-size:13px;color:var(--text-light);margin:20px 0 12px;font-weight:600">👤 個人排行</div>';
+    html += scores.map((s, idx) => {
+      const rank = idx + 1;
+      const rankClass = rank <= 3 ? ` top${rank}` : '';
+      const isMe = s.playerId === myId;
+      const team = CONFIG.TEAMS.find(t => t.id === s.teamId);
+
+      return `
+        <div class="rank-item${isMe ? ' my-team' : ''}">
+          <div class="rank-number${rankClass}">${rank}</div>
+          <div class="rank-emoji">${team ? team.emoji : game.icon}</div>
+          <div style="flex:1">
+            <div class="rank-name">${s.playerName}${isMe ? ' (我)' : ''}</div>
+            <div style="font-size:11px;color:#999">${team ? team.name : ''}</div>
+          </div>
+          <div class="rank-score">${s.score}</div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = html;
   },
 
   switchTab(tab) {

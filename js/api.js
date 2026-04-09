@@ -130,7 +130,8 @@ const API = {
   // URL 構建
   getBaseUrl(endpoint) {
     if (endpoint === 'READ' || endpoint === 'getTeamRankings' || endpoint === 'getBroadcasts' ||
-        endpoint === 'getGameLocations' || endpoint === 'getGameScores') {
+        endpoint === 'getGameLocations' || endpoint === 'getGameScores' ||
+        endpoint === 'getChat' || endpoint === 'getTeamLocations' || endpoint === 'getPlayerTasks') {
       return CONFIG.API.READ;
     }
     if (endpoint === 'getPendingPhotos' || endpoint === 'getDashboard') {

@@ -10,7 +10,23 @@
   <title>遊戲 - 六福村動物嘉年華</title>
   <link rel="stylesheet" href="css/common.css">
   <style>
-    body { background: #1a1a2e; }
+    body { background: #1a1a2e; overflow: hidden; }
+
+    /* 彈幕 */
+    .danmaku-container {
+      position: fixed; top: 60px; left: 0; right: 0; bottom: 0;
+      pointer-events: none; z-index: 20; overflow: hidden;
+    }
+    .danmaku-item {
+      position: absolute; left: 100%;
+      white-space: nowrap; font-size: 14px; font-weight: 600;
+      color: rgba(255,255,255,0.75); text-shadow: 1px 1px 3px rgba(0,0,0,0.6);
+      animation: danmaku-scroll 8s linear forwards;
+    }
+    @keyframes danmaku-scroll {
+      from { transform: translateX(0); }
+      to { transform: translateX(calc(-100vw - 100%)); }
+    }
     .game-page {
       min-height: 100vh;
       display: flex;
@@ -76,14 +92,44 @@
   </div>
 </div>
 
+<!-- 世界彈幕層 -->
+<div class="danmaku-container" id="danmakuLayer"></div>
+
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/chat.js"></script>
 <script>
   if (!Auth.requireLogin()) throw new Error('未登入');
   AudioEngine.init();
   API.init();
+  Chat.init();
+  Chat.initDanmaku('danmakuLayer');
+
+  // 全螢幕提示
+  (function() {
+    if (document.fullscreenElement || window.navigator.standalone) return;
+    const tip = document.createElement('div');
+    tip.id = 'fullscreenTip';
+    tip.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;text-align:center;padding:32px;';
+    tip.innerHTML = `
+      <div style="font-size:48px;margin-bottom:16px">📱</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:8px">建議全螢幕遊玩</div>
+      <div style="font-size:14px;color:#ccc;margin-bottom:24px">全螢幕可獲得最佳遊戲體驗</div>
+      <button onclick="enterFullscreen()" style="background:var(--primary);color:white;border:none;border-radius:12px;padding:14px 32px;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:12px">🔲 進入全螢幕</button>
+      <button onclick="this.parentElement.remove()" style="background:none;color:#999;border:none;font-size:14px;cursor:pointer;padding:8px">稍後再說</button>
+    `;
+    document.body.appendChild(tip);
+  })();
+
+  function enterFullscreen() {
+    const el = document.documentElement;
+    const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (rfs) rfs.call(el);
+    const tip = document.getElementById('fullscreenTip');
+    if (tip) tip.remove();
+  }
 
   const params = new URLSearchParams(window.location.search);
   const gameId = params.get('id');

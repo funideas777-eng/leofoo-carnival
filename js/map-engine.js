@@ -13,6 +13,8 @@ const MapEngine = {
   playerDot: null,
   playerRange: null,
   unlocked: new Set(),
+  teamDots: {},
+  locationTimer: null,
 
   init(containerId) {
     this.container = document.getElementById(containerId);
@@ -23,6 +25,7 @@ const MapEngine = {
     this.renderPins();
     this.initPlayerDot();
     this.loadUnlocks();
+    this.startTeamTracking();
 
     window.addEventListener('resize', () => this.fitMap());
   },
@@ -238,6 +241,12 @@ const MapEngine = {
       const saved = JSON.parse(localStorage.getItem('gameUnlocks') || '[]');
       this.unlocked = new Set(saved);
     } catch { this.unlocked = new Set(); }
+
+    // 測試模式：解鎖全部遊戲
+    if (typeof TEST_MODE !== 'undefined' && TEST_MODE) {
+      CONFIG.GAMES.forEach(g => this.unlocked.add(g.id));
+      localStorage.setItem('gameUnlocks', JSON.stringify([...this.unlocked]));
+    }
   },
 
   showPopup(content) {
@@ -265,6 +274,65 @@ const MapEngine = {
   closePopup() {
     const popup = document.getElementById('mapPopup');
     if (popup) popup.style.transform = 'translateY(100%)';
+  },
+
+  // === 組員定位追蹤 ===
+  startTeamTracking() {
+    // 上報自己位置
+    GPS.onUpdate((pos) => this.reportMyLocation(pos));
+    // 定期拉取隊友位置
+    this.fetchTeamLocations();
+    this.locationTimer = setInterval(() => {
+      if (!document.hidden) this.fetchTeamLocations();
+    }, 15000 + Math.random() * 10000);
+  },
+
+  async reportMyLocation(pos) {
+    const session = Auth.getSession();
+    if (!session || !pos) return;
+    try {
+      await API.post('WRITE', {
+        action: 'updateLocation',
+        playerId: session.playerId,
+        teamId: session.teamId,
+        playerName: session.name,
+        lat: pos.lat,
+        lng: pos.lng,
+        accuracy: pos.accuracy
+      });
+    } catch { /* silent */ }
+  },
+
+  async fetchTeamLocations() {
+    const session = Auth.getSession();
+    if (!session) return;
+    try {
+      const data = await API.get('getTeamLocations', {
+        action: 'getTeamLocations',
+        teamId: session.teamId
+      }, 10000);
+      if (data && data.locations) this.renderTeamDots(data.locations);
+    } catch { /* ignore */ }
+  },
+
+  renderTeamDots(locations) {
+    const session = Auth.getSession();
+    // 移除舊圓點
+    Object.values(this.teamDots).forEach(el => el.remove());
+    this.teamDots = {};
+
+    locations.forEach(loc => {
+      if (loc.playerId === session.playerId) return; // 自己不顯示（已有藍點）
+      const pixel = this.gpsToPixel(loc.lat, loc.lng);
+      const dot = document.createElement('div');
+      dot.className = 'team-member-dot';
+      dot.style.left = pixel.x + 'px';
+      dot.style.top = pixel.y + 'px';
+      dot.innerHTML = `<span class="team-dot-name">${loc.playerName}</span>`;
+      dot.title = loc.playerName;
+      this.canvas.appendChild(dot);
+      this.teamDots[loc.playerId] = dot;
+    });
   },
 
   panTo(lat, lng) {

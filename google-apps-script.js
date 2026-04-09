@@ -5,7 +5,7 @@
 
 const SPREADSHEET_ID = '1hbYc-taIXFmo3u_MQwMp-g8HVh6I5SdjH5k4t8h7pPg';
 const DRIVE_FOLDER_ID = '1hD5DPCXNAi1_Y4zoWwibiyEOgiwg8Kjg';
-const ADMIN_PASSWORD = 'leofoo2026admin';
+const ADMIN_PASSWORD = '11201120';
 
 // === 快取 ===
 const scriptCache = CacheService.getScriptCache();
@@ -59,6 +59,15 @@ function doGet(e) {
       case 'getDashboard':
         result = handleGetDashboard();
         break;
+      case 'getChat':
+        result = handleGetChat(e.parameter.channel, e.parameter.teamId, e.parameter.since);
+        break;
+      case 'getTeamLocations':
+        result = handleGetTeamLocations(parseInt(e.parameter.teamId));
+        break;
+      case 'getPlayerTasks':
+        result = handleGetPlayerTasks(e.parameter.playerId, parseInt(e.parameter.teamId));
+        break;
       default:
         result = { error: '未知的 action: ' + action };
     }
@@ -110,6 +119,12 @@ function doPost(e) {
         break;
       case 'recalcTeamPoints':
         result = handleRecalcTeamPoints();
+        break;
+      case 'sendChat':
+        result = handleSendChat(body);
+        break;
+      case 'updateLocation':
+        result = handleUpdateLocation(body);
         break;
       default:
         result = { error: '未知的 action: ' + body.action };
@@ -484,6 +499,133 @@ function updateTeamTotal(teamId) {
   }
 }
 
+// === 聊天系統 ===
+function handleGetChat(channel, teamId, since) {
+  const cacheKey = 'chat_' + channel + '_' + (teamId || '') + '_' + (since || '0');
+  const cached = scriptCache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const sheet = getSheet('Chat');
+  if (!sheet) return { messages: [] };
+  const data = sheet.getDataRange().getValues();
+  const sinceDate = since ? new Date(since) : new Date(0);
+
+  const messages = data.slice(1)
+    .map(row => ({
+      msgId: row[0], channel: row[1], teamId: row[2],
+      playerId: row[3], playerName: row[4], teamName: row[5],
+      teamEmoji: row[6], content: row[7], timestamp: row[8]
+    }))
+    .filter(m => {
+      if (new Date(m.timestamp) <= sinceDate) return false;
+      if (channel === 'team') return m.channel === 'team' && m.teamId === parseInt(teamId);
+      return m.channel === 'world';
+    })
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+    .slice(-100);
+
+  const result = { messages };
+  scriptCache.put(cacheKey, JSON.stringify(result), 5);
+  return result;
+}
+
+function handleSendChat(body) {
+  const sheet = getSheet('Chat');
+  if (!sheet) return { error: 'Chat sheet 不存在' };
+  const lastRow = sheet.getLastRow();
+  const msgId = lastRow > 1 ? sheet.getRange(lastRow, 1).getValue() + 1 : 1;
+
+  sheet.appendRow([
+    msgId, body.channel, body.teamId,
+    body.playerId, body.playerName, body.teamName,
+    body.teamEmoji, body.content, new Date().toISOString()
+  ]);
+
+  // 清除相關快取
+  scriptCache.remove('chat_world__0');
+  scriptCache.remove('chat_team_' + body.teamId + '_0');
+
+  return { success: true, msgId };
+}
+
+// === 位置上報 ===
+function handleUpdateLocation(body) {
+  const sheet = getSheet('PlayerLocations');
+  if (!sheet) return { error: 'PlayerLocations sheet 不存在' };
+  const data = sheet.getDataRange().getValues();
+
+  // 找現有紀錄更新，或新增
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === body.playerId) {
+      sheet.getRange(i + 1, 3).setValue(body.lat);
+      sheet.getRange(i + 1, 4).setValue(body.lng);
+      sheet.getRange(i + 1, 5).setValue(body.accuracy || 0);
+      sheet.getRange(i + 1, 6).setValue(new Date().toISOString());
+      return { success: true };
+    }
+  }
+
+  sheet.appendRow([
+    body.playerId, body.teamId, body.lat, body.lng,
+    body.accuracy || 0, new Date().toISOString(), body.playerName
+  ]);
+  return { success: true };
+}
+
+function handleGetTeamLocations(teamId) {
+  const cacheKey = 'teamLoc_' + teamId;
+  const cached = scriptCache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const sheet = getSheet('PlayerLocations');
+  if (!sheet) return { locations: [] };
+  const data = sheet.getDataRange().getValues();
+  const cutoff = new Date(Date.now() - 120000); // 2分鐘內有更新的
+
+  const locations = data.slice(1)
+    .filter(row => row[1] === teamId && new Date(row[5]) > cutoff)
+    .map(row => ({
+      playerId: row[0], teamId: row[1],
+      lat: row[2], lng: row[3], accuracy: row[4],
+      updatedAt: row[5], playerName: row[6]
+    }));
+
+  const result = { locations };
+  scriptCache.put(cacheKey, JSON.stringify(result), 10);
+  return result;
+}
+
+// === 玩家任務狀態總覽 ===
+function handleGetPlayerTasks(playerId, teamId) {
+  const unlockSheet = getSheet('GameUnlocks');
+  const scoreSheet = getSheet('GameScores');
+  const advSheet = getSheet('AdventureCompletions');
+
+  const unlockData = unlockSheet.getDataRange().getValues().slice(1);
+  const scoreData = scoreSheet.getDataRange().getValues().slice(1);
+  const advData = advSheet.getDataRange().getValues().slice(1);
+
+  // 遊戲解鎖狀態
+  const unlockedGames = {};
+  unlockData.filter(r => r[0] === playerId).forEach(r => {
+    unlockedGames[r[1]] = r[2];
+  });
+
+  // 遊戲分數（玩家個人最高）
+  const myScores = {};
+  scoreData.filter(r => r[0] === playerId).forEach(r => {
+    if (!myScores[r[3]] || r[4] > myScores[r[3]]) myScores[r[3]] = r[4];
+  });
+
+  // 冒險完成狀態
+  const advStatus = {};
+  advData.filter(r => r[0] === playerId).forEach(r => {
+    advStatus[r[2]] = { verified: r[6], photoUrl: r[5], type: r[4] };
+  });
+
+  return { unlockedGames, myScores, advStatus };
+}
+
 function handleRecalcTeamPoints() {
   // 1. 計算每款遊戲的 Top 3 獎勵
   const scoresSheet = getSheet('GameScores');
@@ -501,26 +643,34 @@ function handleRecalcTeamPoints() {
     }
   }
 
-  // 重新計算 game_bonus
+  // 重新計算 game_bonus（每隊取隊員最高分作為代表分數）
   games.forEach(gameId => {
-    const gameScores = scoresData
-      .filter(row => row[3] === gameId)
-      .sort((a, b) => b[4] - a[4]);
+    const gameScores = scoresData.filter(row => row[3] === gameId);
 
     // 取得每個玩家的最高分
-    const bestScores = {};
+    const playerBest = {};
     gameScores.forEach(row => {
       const pid = row[0];
-      if (!bestScores[pid] || row[4] > bestScores[pid].score) {
-        bestScores[pid] = { score: row[4], teamId: row[2], playerName: row[1] };
+      if (!playerBest[pid] || row[4] > playerBest[pid].score) {
+        playerBest[pid] = { score: row[4], teamId: row[2], playerName: row[1] };
       }
     });
 
-    const sorted = Object.entries(bestScores)
+    // 每隊取隊員中最高分作為團隊代表分數
+    const teamBest = {};
+    Object.entries(playerBest).forEach(([pid, info]) => {
+      const tid = info.teamId;
+      if (!teamBest[tid] || info.score > teamBest[tid].score) {
+        teamBest[tid] = { score: info.score, playerName: info.playerName, teamId: tid };
+      }
+    });
+
+    // 依團隊代表分數排名，取前 3
+    const sorted = Object.entries(teamBest)
       .sort((a, b) => b[1].score - a[1].score)
       .slice(0, 3);
 
-    sorted.forEach(([pid, info], idx) => {
+    sorted.forEach(([tid, info], idx) => {
       tpSheet.appendRow([
         info.teamId,
         'game_bonus',
@@ -568,6 +718,8 @@ function initSpreadsheet() {
     'AdventureCompletions': ['playerId', 'teamId', 'taskId', 'completedAt', 'verificationType', 'photoUrl', 'verified', 'adminNotes'],
     'Broadcasts': ['broadcastId', 'type', 'content', 'timestamp', 'lat', 'lng'],
     'TeamPoints': ['teamId', 'source', 'points', 'detail', 'timestamp'],
+    'Chat': ['msgId', 'channel', 'teamId', 'playerId', 'playerName', 'teamName', 'teamEmoji', 'content', 'timestamp'],
+    'PlayerLocations': ['playerId', 'teamId', 'lat', 'lng', 'accuracy', 'updatedAt', 'playerName'],
     'Config': ['key', 'value']
   };
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'leofoo-carnival-v1';
+const CACHE_NAME = 'leofoo-carnival-v2';
 const STATIC_ASSETS = [
   '/leofoo-carnival/index.html',
   '/leofoo-carnival/map.html',
@@ -16,6 +16,7 @@ const STATIC_ASSETS = [
   '/leofoo-carnival/js/map-engine.js',
   '/leofoo-carnival/js/scoreboard-engine.js',
   '/leofoo-carnival/js/photo.js',
+  '/leofoo-carnival/js/chat.js',
   '/leofoo-carnival/js/games/snake.js',
   '/leofoo-carnival/js/games/racing.js',
   '/leofoo-carnival/js/games/memory.js',
