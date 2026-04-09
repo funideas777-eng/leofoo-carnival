@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>管理後台 - 六福村動物嘉年華</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    body { background: #f5f5f5; }
+    .admin-login {
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .admin-tabs {
+      display: flex; background: white; border-radius: 12px;
+      margin: 0 0 16px; overflow: hidden; box-shadow: var(--shadow);
+    }
+    .admin-tab {
+      flex: 1; padding: 12px 8px; text-align: center; font-size: 12px;
+      font-weight: 600; border: none; background: white; cursor: pointer;
+    }
+    .admin-tab.active { background: var(--primary); color: white; }
+    .admin-section { display: none; }
+    .admin-section.active { display: block; }
+
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;
+    }
+    .stat-card {
+      background: white; border-radius: 12px; padding: 16px; text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .stat-number { font-size: 28px; font-weight: 900; color: var(--primary); }
+    .stat-label { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+
+    .broadcast-form {
+      background: white; border-radius: var(--radius); padding: 20px;
+      box-shadow: var(--shadow); margin-bottom: 16px;
+    }
+    .broadcast-type-selector {
+      display: flex; gap: 8px; margin-bottom: 12px;
+    }
+    .type-btn {
+      flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;
+      background: white; cursor: pointer; text-align: center; font-size: 12px;
+    }
+    .type-btn.active { border-color: var(--primary); background: rgba(255,107,53,0.1); }
+
+    .photo-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    }
+    .photo-card {
+      background: white; border-radius: 12px; overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .photo-card img {
+      width: 100%; aspect-ratio: 1; object-fit: cover;
+    }
+    .photo-card-info { padding: 10px; font-size: 12px; }
+    .photo-card-actions {
+      display: flex; gap: 8px; padding: 0 10px 10px;
+    }
+
+    .broadcast-history {
+      max-height: 300px; overflow-y: auto;
+    }
+    .broadcast-item {
+      background: white; border-radius: 8px; padding: 12px; margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 13px;
+    }
+
+    .points-form {
+      background: white; border-radius: var(--radius); padding: 20px;
+      box-shadow: var(--shadow);
+    }
+  </style>
+</head>
+<body>
+
+<!-- 登入畫面 -->
+<div class="admin-login" id="loginPanel">
+  <div class="card" style="width:100%;max-width:360px;">
+    <h2 style="text-align:center;margin-bottom:20px;">🔐 管理員登入</h2>
+    <div class="form-group">
+      <input type="password" class="input" id="adminPwd" placeholder="請輸入管理密碼">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="adminLogin()">登入後台</button>
+  </div>
+</div>
+
+<!-- 管理面板 -->
+<div id="adminPanel" style="display:none;">
+  <div class="top-bar">
+    <div style="width:40px;"></div>
+    <div class="top-bar-title">⚙️ 管理後台</div>
+    <button class="top-bar-action" onclick="refreshDashboard()">🔄</button>
+  </div>
+
+  <div style="padding:64px 16px 24px;">
+    <div class="admin-tabs">
+      <button class="admin-tab active" onclick="switchAdmin('dashboard',this)">📊</button>
+      <button class="admin-tab" onclick="switchAdmin('broadcast',this)">📢</button>
+      <button class="admin-tab" onclick="switchAdmin('photos',this)">📷</button>
+      <button class="admin-tab" onclick="switchAdmin('points',this)">🏆</button>
+    </div>
+
+    <!-- 儀表板 -->
+    <div class="admin-section active" id="sec-dashboard">
+      <div class="stat-grid" id="statGrid">
+        <div class="stat-card"><div class="stat-number" id="statPlayers">-</div><div class="stat-label">已報到玩家</div></div>
+        <div class="stat-card"><div class="stat-number" id="statGames">-</div><div class="stat-label">遊戲總次數</div></div>
+        <div class="stat-card"><div class="stat-number" id="statUnlocks">-</div><div class="stat-label">遊戲解鎖數</div></div>
+        <div class="stat-card"><div class="stat-number" id="statAdventures">-</div><div class="stat-label">冒險完成數</div></div>
+        <div class="stat-card"><div class="stat-number" id="statPhotos">-</div><div class="stat-label">待審照片</div></div>
+        <div class="stat-card"><div class="stat-number" id="statTime">-</div><div class="stat-label">目前時間</div></div>
+      </div>
+      <button class="btn btn-outline btn-block" onclick="recalcPoints()">🔄 重新計算所有團隊分數</button>
+    </div>
+
+    <!-- 廣播 -->
+    <div class="admin-section" id="sec-broadcast">
+      <div class="broadcast-form">
+        <h3 style="margin-bottom:12px;">📢 發送廣播訊息</h3>
+        <div class="broadcast-type-selector">
+          <div class="type-btn active" data-type="text" onclick="selectBroadcastType('text',this)">📝 文字</div>
+          <div class="type-btn" data-type="image" onclick="selectBroadcastType('image',this)">📷 圖片</div>
+          <div class="type-btn" data-type="location" onclick="selectBroadcastType('location',this)">📍 座標</div>
+        </div>
+        <div class="form-group">
+          <textarea class="input" id="broadcastContent" rows="3" placeholder="輸入訊息內容..." style="resize:none;"></textarea>
+        </div>
+        <div id="locationFields" style="display:none;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <input type="number" class="input" id="bcLat" placeholder="緯度" step="0.0001">
+            <input type="number" class="input" id="bcLng" placeholder="經度" step="0.0001">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="sendBroadcast()">📤 發送給所有玩家</button>
+      </div>
+
+      <h3 style="margin:16px 0 8px;">歷史訊息</h3>
+      <div class="broadcast-history" id="broadcastHistory"></div>
+    </div>
+
+    <!-- 照片驗證 -->
+    <div class="admin-section" id="sec-photos">
+      <h3 style="margin-bottom:12px;">📷 待驗證照片</h3>
+      <div class="photo-grid" id="photoGrid">
+        <p style="color:var(--text-light);grid-column:1/-1;text-align:center;padding:40px;">載入中...</p>
+      </div>
+    </div>
+
+    <!-- 加分 -->
+    <div class="admin-section" id="sec-points">
+      <div class="points-form">
+        <h3 style="margin-bottom:16px;">🏆 手動加分</h3>
+        <div class="form-group">
+          <label class="form-label">選擇隊伍</label>
+          <select class="select" id="pointsTeam">
+            <option value="">-- 選擇隊伍 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">加分分數</label>
+          <input type="number" class="input" id="pointsAmount" placeholder="輸入分數" value="100">
+        </div>
+        <div class="form-group">
+          <label class="form-label">原因說明</label>
+          <input type="text" class="input" id="pointsReason" placeholder="例：最佳團隊精神獎">
+        </div>
+        <button class="btn btn-accent btn-block" onclick="addManualPoints()">➕ 確認加分</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/audio.js"></script>
+<script>
+  let adminPassword = '';
+  let broadcastType = 'text';
+
+  API.init();
+
+  // 填充隊伍下拉選單
+  const teamSelect = document.getElementById('pointsTeam');
+  CONFIG.TEAMS.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = `${t.emoji} ${t.name} (第${t.id}組)`;
+    teamSelect.appendChild(opt);
+  });
+
+  function adminLogin() {
+    adminPassword = document.getElementById('adminPwd').value;
+    if (!adminPassword) { alert('請輸入密碼'); return; }
+    document.getElementById('loginPanel').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    refreshDashboard();
+    loadPhotos();
+    loadBroadcastHistory();
+  }
+
+  function switchAdmin(section, btn) {
+    document.querySelectorAll('.admin-section').forEach(el => el.classList.remove('active'));
+    document.getElementById('sec-' + section).classList.add('active');
+    document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  // === 儀表板 ===
+  async function refreshDashboard() {
+    try {
+      const data = await API.get('getDashboard', { action: 'getDashboard' }, 0);
+      if (data.dashboard) {
+        const d = data.dashboard;
+        document.getElementById('statPlayers').textContent = d.totalPlayers;
+        document.getElementById('statGames').textContent = d.totalGamePlays;
+        document.getElementById('statUnlocks').textContent = d.totalUnlocks;
+        document.getElementById('statAdventures').textContent = d.totalAdventureCompletions;
+        document.getElementById('statPhotos').textContent = d.pendingPhotos;
+        document.getElementById('statTime').textContent = new Date().toLocaleTimeString('zh-TW');
+      }
+    } catch (e) {
+      console.error('Dashboard 載入失敗', e);
+    }
+  }
+
+  async function recalcPoints() {
+    if (!confirm('確定要重新計算所有團隊分數？')) return;
+    try {
+      await API.post('ADMIN', { action: 'recalcTeamPoints', password: adminPassword });
+      alert('✅ 重算完成！');
+      refreshDashboard();
+    } catch (e) {
+      alert('❌ 失敗: ' + e.message);
+    }
+  }
+
+  // === 廣播 ===
+  function selectBroadcastType(type, btn) {
+    broadcastType = type;
+    document.querySelectorAll('.type-btn').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('locationFields').style.display = type === 'location' ? 'block' : 'none';
+    const placeholder = { text: '輸入文字訊息...', image: '輸入圖片 URL...', location: '輸入地點說明...' };
+    document.getElementById('broadcastContent').placeholder = placeholder[type] || '';
+  }
+
+  async function sendBroadcast() {
+    const content = document.getElementById('broadcastContent').value.trim();
+    if (!content) { alert('請輸入訊息內容'); return; }
+
+    const body = {
+      action: 'broadcast',
+      password: adminPassword,
+      type: broadcastType,
+      content: content,
+      lat: broadcastType === 'location' ? parseFloat(document.getElementById('bcLat').value) || null : null,
+      lng: broadcastType === 'location' ? parseFloat(document.getElementById('bcLng').value) || null : null
+    };
+
+    try {
+      await API.post('ADMIN', body);
+      alert('✅ 廣播已發送！');
+      document.getElementById('broadcastContent').value = '';
+      loadBroadcastHistory();
+    } catch (e) {
+      alert('❌ 發送失敗: ' + e.message);
+    }
+  }
+
+  async function loadBroadcastHistory() {
+    try {
+      const data = await API.get('getBroadcasts', { action: 'getBroadcasts', since: new Date(0).toISOString() }, 0);
+      const container = document.getElementById('broadcastHistory');
+      if (data.broadcasts && data.broadcasts.length > 0) {
+        container.innerHTML = data.broadcasts.slice(0, 20).map(b => {
+          const time = new Date(b.timestamp).toLocaleTimeString('zh-TW');
+          const icons = { text: '📝', image: '📷', voice: '🎤', location: '📍' };
+          return `<div class="broadcast-item">
+            <span>${icons[b.type] || '📢'}</span>
+            <strong>${time}</strong> — ${b.content}
+          </div>`;
+        }).join('');
+      } else {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px;">尚無廣播訊息</p>';
+      }
+    } catch { /* ignore */ }
+  }
+
+  // === 照片驗證 ===
+  async function loadPhotos() {
+    try {
+      const data = await API.get('getPendingPhotos', { action: 'getPendingPhotos' }, 0);
+      const grid = document.getElementById('photoGrid');
+      if (data.pending && data.pending.length > 0) {
+        grid.innerHTML = data.pending.map(p => {
+          const team = getTeamById(p.teamId);
+          return `<div class="photo-card">
+            <img src="${p.photoUrl}" alt="team photo" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 font-size=%2240%22>📷</text></svg>'">
+            <div class="photo-card-info">
+              ${team ? team.emoji + ' ' + team.name : '隊伍' + p.teamId} · ${p.taskId}
+            </div>
+            <div class="photo-card-actions">
+              <button class="btn btn-sm btn-secondary" onclick="verifyPhoto(${p.rowIndex}, true)">✅</button>
+              <button class="btn btn-sm btn-outline" onclick="verifyPhoto(${p.rowIndex}, false)" style="font-size:12px;">❌</button>
+            </div>
+          </div>`;
+        }).join('');
+      } else {
+        grid.innerHTML = '<p style="color:var(--text-light);grid-column:1/-1;text-align:center;padding:40px;">目前沒有待驗證照片</p>';
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function verifyPhoto(rowIndex, approved) {
+    const points = approved ? parseInt(prompt('給予分數 (預設200):', '200')) || 200 : 0;
+    try {
+      await API.post('ADMIN', {
+        action: 'verifyPhoto',
+        password: adminPassword,
+        completionRow: rowIndex,
+        verified: approved,
+        points: points,
+        adminNotes: approved ? '通過' : '未通過'
+      });
+      alert(approved ? '✅ 已核准 +' + points + '分' : '❌ 已拒絕');
+      loadPhotos();
+      refreshDashboard();
+    } catch (e) {
+      alert('❌ 操作失敗: ' + e.message);
+    }
+  }
+
+  // === 手動加分 ===
+  async function addManualPoints() {
+    const teamId = parseInt(document.getElementById('pointsTeam').value);
+    const points = parseInt(document.getElementById('pointsAmount').value);
+    const reason = document.getElementById('pointsReason').value.trim();
+
+    if (!teamId) { alert('請選擇隊伍'); return; }
+    if (!points) { alert('請輸入分數'); return; }
+    if (!reason) { alert('請輸入原因'); return; }
+
+    const team = getTeamById(teamId);
+    if (!confirm(`確認為 ${team.emoji} ${team.name} 加 ${points} 分？\n原因：${reason}`)) return;
+
+    try {
+      await API.post('ADMIN', {
+        action: 'addManualPoints',
+        password: adminPassword,
+        teamId: teamId,
+        points: points,
+        detail: reason
+      });
+      alert(`✅ 已為 ${team.name} 加 ${points} 分！`);
+      document.getElementById('pointsReason').value = '';
+      refreshDashboard();
+    } catch (e) {
+      alert('❌ 加分失敗: ' + e.message);
+    }
+  }
+
+  // 自動刷新
+  setInterval(refreshDashboard, 30000);
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>

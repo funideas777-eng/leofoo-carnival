@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>六福村動物嘉年華</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, #FF6B35 0%, #FFD166 50%, #2EC4B6 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .login-bg-animals {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      font-size: 40px;
+      opacity: 0.15;
+      pointer-events: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      gap: 20px;
+      padding: 20px;
+      overflow: hidden;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      background: rgba(255,255,255,0.95);
+      border-radius: 24px;
+      padding: 36px 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      position: relative;
+      z-index: 1;
+      animation: fadeIn 0.6s ease;
+    }
+    .login-logo {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .login-logo-icon {
+      font-size: 64px;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .login-title {
+      text-align: center;
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .login-subtitle {
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-light);
+      margin-bottom: 32px;
+    }
+    .team-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .team-preview {
+      margin-top: 12px;
+      padding: 16px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: var(--radius);
+      color: white;
+      text-align: center;
+      display: none;
+    }
+    .team-preview.show { display: block; animation: fadeIn 0.3s ease; }
+    .team-preview-emoji { font-size: 48px; }
+    .team-preview-name { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .team-preview-number { font-size: 13px; opacity: 0.8; }
+    .login-footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="login-page">
+  <div class="login-bg-animals" id="bgAnimals"></div>
+
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="login-logo-icon">🎪</span>
+    </div>
+    <h1 class="login-title">六福村動物嘉年華</h1>
+    <p class="login-subtitle">600人闖關大冒險 · 10:00-14:00</p>
+
+    <form id="loginForm" onsubmit="return handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">你的姓名</label>
+        <input type="text" class="input" id="playerName" placeholder="請輸入姓名" required maxlength="20" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">選擇你的隊伍</label>
+        <select class="select" id="teamSelect" required onchange="showTeamPreview()">
+          <option value="">-- 請選擇隊伍 (第1~60組) --</option>
+        </select>
+      </div>
+
+      <div class="team-preview" id="teamPreview">
+        <div class="team-preview-emoji" id="previewEmoji"></div>
+        <div class="team-preview-name" id="previewName"></div>
+        <div class="team-preview-number" id="previewNumber"></div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn" style="margin-top: 24px;">
+        🚀 加入冒險
+      </button>
+    </form>
+  </div>
+
+  <p class="login-footer">請確認你的組別後再加入，加入後無法更改隊伍</p>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/audio.js"></script>
+<script>
+  // 如果已登入，直接跳轉
+  if (Auth.isLoggedIn()) {
+    window.location.href = 'map.html';
+  }
+
+  // 填充隊伍下拉選單
+  const select = document.getElementById('teamSelect');
+  CONFIG.TEAMS.forEach(team => {
+    const opt = document.createElement('option');
+    opt.value = team.id;
+    opt.textContent = `第${team.id}組 ${team.emoji} ${team.name}`;
+    select.appendChild(opt);
+  });
+
+  // 背景動物裝飾
+  const animals = CONFIG.TEAMS.map(t => t.emoji);
+  const bgEl = document.getElementById('bgAnimals');
+  for (let i = 0; i < 80; i++) {
+    const span = document.createElement('span');
+    span.textContent = animals[i % animals.length];
+    span.style.opacity = 0.3 + Math.random() * 0.4;
+    span.style.fontSize = (24 + Math.random() * 24) + 'px';
+    bgEl.appendChild(span);
+  }
+
+  // 顯示隊伍預覽
+  function showTeamPreview() {
+    const teamId = parseInt(select.value);
+    const preview = document.getElementById('teamPreview');
+    if (!teamId) {
+      preview.classList.remove('show');
+      return;
+    }
+    const team = getTeamById(teamId);
+    document.getElementById('previewEmoji').textContent = team.emoji;
+    document.getElementById('previewName').textContent = team.name;
+    document.getElementById('previewNumber').textContent = `第 ${team.id} 組 · 每組10人`;
+    preview.classList.add('show');
+    AudioEngine.init();
+    AudioEngine.tapButton();
+  }
+
+  // 登入處理
+  async function handleLogin(e) {
+    e.preventDefault();
+    const name = document.getElementById('playerName').value.trim();
+    const teamId = document.getElementById('teamSelect').value;
+
+    if (!name) { alert('請輸入姓名'); return false; }
+    if (!teamId) { alert('請選擇隊伍'); return false; }
+
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.textContent = '加入中...';
+
+    try {
+      AudioEngine.init();
+      AudioEngine.unlockGame();
+      API.init();
+      await Auth.register(name, teamId);
+      window.location.href = 'map.html';
+    } catch (err) {
+      // 即使 API 失敗，本地 session 已建立
+      window.location.href = 'map.html';
+    }
+
+    return false;
+  }
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>

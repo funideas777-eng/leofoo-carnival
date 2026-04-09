@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>冒險任務 - 六福村動物嘉年華</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    body { background: var(--bg); }
+    .task-card {
+      background: white; border-radius: var(--radius); padding: 20px;
+      margin-bottom: 16px; box-shadow: var(--shadow);
+    }
+    .task-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+    }
+    .task-icon { font-size: 40px; }
+    .task-name { font-size: 18px; font-weight: 700; }
+    .task-points { font-size: 14px; color: var(--primary); font-weight: 600; }
+    .task-status {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 12px; font-weight: 600;
+    }
+    .status-pending { background: #FFF3E0; color: #E65100; }
+    .status-verifying { background: #E3F2FD; color: #1565C0; }
+    .status-done { background: #E8F5E9; color: #2E7D32; }
+
+    .gps-panel {
+      background: #F5F5F5; border-radius: 12px; padding: 16px;
+      margin: 12px 0;
+    }
+    .gps-distance { font-size: 28px; font-weight: 900; color: var(--primary); text-align: center; }
+    .gps-label { font-size: 12px; color: var(--text-light); text-align: center; }
+    .dwell-bar {
+      height: 8px; background: #e0e0e0; border-radius: 4px; margin-top: 8px; overflow: hidden;
+    }
+    .dwell-fill {
+      height: 100%; background: linear-gradient(90deg, var(--secondary), var(--primary));
+      border-radius: 4px; transition: width 1s linear;
+    }
+
+    .photo-section { margin-top: 16px; }
+    .photo-canvas-wrap {
+      width: 100%; aspect-ratio: 1; background: #f0f0f0;
+      border-radius: 12px; overflow: hidden; margin: 12px 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .photo-canvas-wrap canvas { width: 100%; height: 100%; }
+    .photo-placeholder {
+      color: var(--text-light); font-size: 48px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="top-bar">
+  <button class="top-bar-back" onclick="window.location.href='map.html'">←</button>
+  <div class="top-bar-title">🎢 冒險任務</div>
+  <div style="width:40px;"></div>
+</div>
+
+<div id="notification-bar"></div>
+
+<div class="page-container" id="content"></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/gps.js"></script>
+<script src="js/broadcast.js"></script>
+<script src="js/photo.js"></script>
+<script>
+  if (!Auth.requireLogin()) throw new Error('未登入');
+  const session = Auth.getSession();
+  AudioEngine.init();
+  API.init();
+  GPS.init();
+  Broadcast.init();
+
+  const params = new URLSearchParams(window.location.search);
+  const taskId = params.get('id');
+
+  if (taskId) {
+    showTaskDetail(taskId);
+  } else {
+    showTaskList();
+  }
+
+  function showTaskList() {
+    const content = document.getElementById('content');
+    content.innerHTML = '<h2 style="font-size:18px;margin-bottom:16px;">🎢 冒險任務列表</h2>' +
+      CONFIG.ADVENTURES.map(adv => `
+        <div class="task-card" onclick="window.location.href='adventure.html?id=${adv.id}'">
+          <div class="task-header">
+            <div class="task-icon">${adv.icon}</div>
+            <div>
+              <div class="task-name">${adv.name}</div>
+              <div class="task-points">🏆 ${adv.points} 分</div>
+            </div>
+          </div>
+          <div style="font-size:13px;color:var(--text-light);">
+            ${adv.requirePhoto ? '📸 拍攝團隊照片上傳驗證' : `📍 前往設施 · ⏱ 停留${adv.dwellSeconds}秒驗證搭乘`}
+          </div>
+        </div>
+      `).join('');
+  }
+
+  function showTaskDetail(id) {
+    const adv = getAdventureById(id);
+    if (!adv) { showTaskList(); return; }
+
+    const content = document.getElementById('content');
+
+    if (adv.requirePhoto) {
+      showPhotoTask(adv, content);
+    } else {
+      showGpsTask(adv, content);
+    }
+  }
+
+  // === GPS 停留驗證任務 ===
+  function showGpsTask(adv, content) {
+    content.innerHTML = `
+      <div class="task-card">
+        <div class="task-header">
+          <div class="task-icon">${adv.icon}</div>
+          <div>
+            <div class="task-name">${adv.name}</div>
+            <div class="task-points">🏆 ${adv.points} 分</div>
+          </div>
+        </div>
+        <p style="font-size:14px;color:var(--text-light);margin-bottom:12px;">
+          前往遊樂設施附近，停留 ${adv.dwellSeconds} 秒即可驗證搭乘體驗
+        </p>
+
+        <div class="gps-panel">
+          <div class="gps-distance" id="distDisplay">定位中...</div>
+          <div class="gps-label">距離設施</div>
+          <div id="dwellSection" style="display:none;margin-top:12px;">
+            <div class="gps-label">停留時間：<span id="dwellTime">0</span> / ${adv.dwellSeconds} 秒</div>
+            <div class="dwell-bar">
+              <div class="dwell-fill" id="dwellFill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="verifyBtn" disabled onclick="submitGpsVerification('${adv.id}')">
+          ⏳ 尚未到達設施範圍
+        </button>
+      </div>
+    `;
+
+    let inZone = false;
+    let dwellStart = null;
+    let dwellInterval = null;
+
+    GPS.onUpdate((pos) => {
+      const dist = GPS.distanceTo(adv.lat, adv.lng);
+      document.getElementById('distDisplay').textContent = GPS.formatDistance(dist);
+
+      if (dist <= adv.radius) {
+        if (!inZone) {
+          inZone = true;
+          dwellStart = Date.now();
+          document.getElementById('dwellSection').style.display = 'block';
+          AudioEngine.enterZone();
+
+          dwellInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - dwellStart) / 1000);
+            document.getElementById('dwellTime').textContent = elapsed;
+            const pct = Math.min(100, (elapsed / adv.dwellSeconds) * 100);
+            document.getElementById('dwellFill').style.width = pct + '%';
+
+            if (elapsed >= adv.dwellSeconds) {
+              clearInterval(dwellInterval);
+              const btn = document.getElementById('verifyBtn');
+              btn.disabled = false;
+              btn.textContent = '✅ 驗證完成，提交!';
+              btn.className = 'btn btn-accent btn-block';
+              AudioEngine.unlockGame();
+            }
+          }, 1000);
+        }
+      } else {
+        if (inZone) {
+          inZone = false;
+          if (dwellInterval) clearInterval(dwellInterval);
+          dwellStart = null;
+          document.getElementById('dwellSection').style.display = 'none';
+          document.getElementById('verifyBtn').disabled = true;
+          document.getElementById('verifyBtn').textContent = '⏳ 尚未到達設施範圍';
+        }
+      }
+    });
+  }
+
+  async function submitGpsVerification(taskId) {
+    const btn = document.getElementById('verifyBtn');
+    btn.disabled = true;
+    btn.textContent = '提交中...';
+
+    try {
+      await API.post('WRITE', {
+        action: 'completeAdventure',
+        playerId: session.playerId,
+        teamId: session.teamId,
+        taskId: taskId,
+        lat: GPS.getPosition().lat,
+        lng: GPS.getPosition().lng
+      });
+      btn.textContent = '🎉 驗證成功!';
+      btn.className = 'btn btn-secondary btn-block';
+      AudioEngine.uploadSuccess();
+    } catch {
+      btn.textContent = '❌ 提交失敗，請重試';
+      btn.disabled = false;
+      AudioEngine.error();
+    }
+  }
+
+  // === 拍照任務 ===
+  function showPhotoTask(adv, content) {
+    content.innerHTML = `
+      <div class="task-card">
+        <div class="task-header">
+          <div class="task-icon">${adv.icon}</div>
+          <div>
+            <div class="task-name">${adv.name}</div>
+            <div class="task-points">🏆 ${adv.points} 分</div>
+          </div>
+        </div>
+        <p style="font-size:14px;color:var(--text-light);margin-bottom:8px;">
+          拍攝團隊照片，照片會自動加上活動邊框
+        </p>
+
+        <div class="photo-section">
+          <div class="photo-canvas-wrap" id="photoPreview">
+            <canvas id="photoCanvas" style="display:none;"></canvas>
+            <div class="photo-placeholder" id="photoPlaceholder">📷</div>
+          </div>
+
+          <button class="btn btn-secondary btn-block" onclick="takePhoto()">
+            📸 拍攝照片
+          </button>
+          <button class="btn btn-primary btn-block" id="uploadBtn" style="margin-top:8px;display:none;" onclick="uploadPhoto('${adv.id}')">
+            ⬆️ 上傳照片
+          </button>
+          <div id="uploadStatus" style="text-align:center;margin-top:8px;font-size:13px;color:var(--text-light);"></div>
+        </div>
+      </div>
+    `;
+
+    PhotoModule.init('photoCanvas');
+  }
+
+  async function takePhoto() {
+    const img = await PhotoModule.capturePhoto();
+    if (!img) return;
+
+    document.getElementById('photoCanvas').style.display = 'block';
+    document.getElementById('photoPlaceholder').style.display = 'none';
+
+    PhotoModule.renderPreview();
+    // 繪製預設邊框
+    setTimeout(() => {
+      PhotoModule.drawDefaultFrame(session.teamName, session.teamEmoji);
+    }, 100);
+
+    document.getElementById('uploadBtn').style.display = 'block';
+  }
+
+  async function uploadPhoto(taskId) {
+    const btn = document.getElementById('uploadBtn');
+    const status = document.getElementById('uploadStatus');
+    btn.disabled = true;
+    btn.textContent = '上傳中...';
+    status.textContent = '📤 正在上傳照片...';
+
+    const result = await PhotoModule.upload(taskId);
+
+    if (result.error) {
+      status.textContent = '❌ ' + result.error;
+      btn.disabled = false;
+      btn.textContent = '⬆️ 重新上傳';
+    } else {
+      status.textContent = '✅ 上傳成功! 等待管理員驗證';
+      btn.textContent = '🎉 已上傳';
+      btn.className = 'btn btn-secondary btn-block';
+    }
+  }
+
+  document.addEventListener('touchstart', () => AudioEngine.resume(), { once: true });
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>

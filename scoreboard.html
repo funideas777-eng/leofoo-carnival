@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>排行榜 - 六福村動物嘉年華</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .score-header {
+      text-align: center; padding: 24px 0 16px;
+    }
+    .score-header h1 { font-size: 24px; }
+    .score-header p { font-size: 13px; color: var(--text-light); }
+    .score-tabs { display: flex; margin: 0 0 16px; gap: 0; }
+    .score-tab {
+      flex: 1; padding: 12px; text-align: center; font-size: 14px;
+      font-weight: 600; border: none; background: #f0f0f0; cursor: pointer;
+    }
+    .score-tab:first-child { border-radius: 10px 0 0 10px; }
+    .score-tab:last-child { border-radius: 0 10px 10px 0; }
+    .score-tab.active { background: var(--primary); color: white; }
+    .my-team { background: rgba(255,107,53,0.08); border-left: 3px solid var(--primary); }
+    #gameSelector { display: none; margin-bottom: 12px; overflow-x: auto; }
+    .game-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .game-chip {
+      padding: 6px 14px; border-radius: 20px; border: 2px solid #e0e0e0;
+      font-size: 13px; background: white; cursor: pointer; white-space: nowrap;
+    }
+    .game-chip.active { border-color: var(--primary); background: rgba(255,107,53,0.1); }
+    .top3-podium {
+      display: flex; align-items: flex-end; justify-content: center;
+      gap: 12px; padding: 16px 0 24px; min-height: 180px;
+    }
+    .podium-item {
+      text-align: center; flex: 1; max-width: 100px;
+    }
+    .podium-emoji { font-size: 36px; }
+    .podium-name { font-size: 12px; font-weight: 700; margin: 4px 0; }
+    .podium-score { font-size: 14px; font-weight: 800; color: var(--primary); }
+    .podium-bar {
+      border-radius: 8px 8px 0 0; margin-top: 8px;
+      display: flex; align-items: flex-end; justify-content: center;
+      color: white; font-weight: 900; font-size: 20px; padding-bottom: 8px;
+    }
+    .podium-1 .podium-bar { height: 100px; background: linear-gradient(to top, #FFD700, #FFA000); }
+    .podium-2 .podium-bar { height: 70px; background: linear-gradient(to top, #C0C0C0, #9E9E9E); }
+    .podium-3 .podium-bar { height: 50px; background: linear-gradient(to top, #CD7F32, #A1887F); }
+    .auto-refresh { text-align:center; font-size:11px; color:#999; padding:8px; }
+  </style>
+</head>
+<body>
+
+<div class="top-bar">
+  <button class="top-bar-back" onclick="window.location.href='map.html'">←</button>
+  <div class="top-bar-title">🏆 即時戰報</div>
+  <div style="width:40px;"></div>
+</div>
+
+<div class="page-container">
+  <div class="score-header">
+    <h1>🏆 即時積分戰報</h1>
+    <p>每 30 秒自動更新</p>
+  </div>
+
+  <div class="score-tabs">
+    <button class="score-tab active" data-tab="team" onclick="ScoreboardEngine.switchTab('team')">🏆 團隊排行</button>
+    <button class="score-tab" data-tab="game" onclick="ScoreboardEngine.switchTab('game')">🎮 遊戲排行</button>
+  </div>
+
+  <div id="gameSelector">
+    <div class="game-chips" id="gameChips"></div>
+  </div>
+
+  <div id="podium"></div>
+  <div id="rankingList"></div>
+  <div class="auto-refresh">🔄 自動更新中</div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/scoreboard-engine.js"></script>
+<script>
+  if (!Auth.requireLogin()) throw new Error('未登入');
+  AudioEngine.init();
+  API.init();
+
+  // 遊戲選擇器
+  const chipsEl = document.getElementById('gameChips');
+  chipsEl.innerHTML = CONFIG.GAMES.map(g =>
+    `<div class="game-chip${g.id === 'snake' ? ' active' : ''}" data-game="${g.id}" onclick="selectGameChip(this,'${g.id}')">${g.icon} ${g.name}</div>`
+  ).join('');
+
+  function selectGameChip(el, gameId) {
+    document.querySelectorAll('.game-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    ScoreboardEngine.selectGame(gameId);
+  }
+
+  ScoreboardEngine.init();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>

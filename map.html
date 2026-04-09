@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>六福村動物嘉年華 - 地圖</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .popup-header { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .popup-status { margin: 12px 0; font-size: 14px; font-weight: 600; }
+    .my-team { background: rgba(255,107,53,0.08); }
+
+    /* 地圖繪製的格線裝飾 */
+    .map-illustrated {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* GPS 狀態指示 */
+    .gps-status {
+      position: fixed;
+      top: 62px; right: 12px;
+      background: white;
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 11px;
+      box-shadow: var(--shadow);
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .gps-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+    .gps-dot.active { background: #4CAF50; animation: pulse 2s infinite; }
+    .gps-dot.warning { background: #FF9800; }
+
+    /* 分頁內容區 */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .tab-content-map { position: fixed; top: 56px; left: 0; right: 0; bottom: calc(60px + var(--safe-bottom)); }
+
+    /* 遊戲列表模式 */
+    .game-list {
+      padding: 72px 16px calc(76px + var(--safe-bottom));
+    }
+    .game-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+      background: white;
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .game-card:active { transform: scale(0.98); }
+    .game-card-icon { font-size: 36px; }
+    .game-card-info { flex: 1; }
+    .game-card-name { font-size: 16px; font-weight: 700; }
+    .game-card-desc { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    .game-card-status { font-size: 13px; font-weight: 600; }
+    .game-card-status.locked { color: #999; }
+    .game-card-status.unlocked { color: var(--secondary); }
+
+    /* 排行榜內嵌 */
+    .score-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+    }
+    .score-tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      background: #f0f0f0;
+      cursor: pointer;
+    }
+    .score-tab:first-child { border-radius: 10px 0 0 10px; }
+    .score-tab:last-child { border-radius: 0 10px 10px 0; }
+    .score-tab.active { background: var(--primary); color: white; }
+    #gameSelector {
+      display: none;
+      margin-bottom: 12px;
+    }
+    .game-select-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .game-chip {
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 2px solid #e0e0e0;
+      font-size: 13px;
+      background: white;
+      cursor: pointer;
+    }
+    .game-chip.active { border-color: var(--primary); background: rgba(255,107,53,0.1); }
+  </style>
+</head>
+<body>
+
+<!-- 頂部導航 -->
+<div class="top-bar">
+  <div id="topBarTeam" style="font-size:14px;"></div>
+  <div class="top-bar-title">🎪 動物嘉年華</div>
+  <button class="top-bar-action" onclick="Broadcast.openMessages()" id="bellBtn">
+    🔔
+  </button>
+</div>
+
+<!-- GPS 狀態 -->
+<div class="gps-status" id="gpsStatus">
+  <div class="gps-dot" id="gpsDot"></div>
+  <span id="gpsText">GPS 定位中...</span>
+</div>
+
+<!-- 通知欄 -->
+<div id="notification-bar"></div>
+<!-- 訊息面板 -->
+<div id="message-panel">
+  <div class="top-bar" style="position:sticky;top:0;">
+    <button class="top-bar-back" onclick="Broadcast.closeMessages()">←</button>
+    <div class="top-bar-title">📢 活動訊息</div>
+    <div style="width:40px;"></div>
+  </div>
+</div>
+
+<!-- Tab: 地圖 -->
+<div class="tab-content tab-content-map active" id="tabMap">
+  <div class="map-container" id="mapContainer">
+    <div class="map-viewport">
+      <div class="map-canvas" id="mapCanvas">
+        <canvas id="mapBgCanvas" class="map-illustrated"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: 遊戲列表 -->
+<div class="tab-content" id="tabGames">
+  <div class="game-list" id="gameList"></div>
+</div>
+
+<!-- Tab: 冒險任務 -->
+<div class="tab-content" id="tabAdventure">
+  <div class="game-list" id="adventureList"></div>
+</div>
+
+<!-- Tab: 排行榜 -->
+<div class="tab-content" id="tabScore">
+  <div class="page-container">
+    <div class="score-tabs">
+      <button class="score-tab active" data-tab="team" onclick="ScoreboardEngine.switchTab('team')">🏆 團隊排行</button>
+      <button class="score-tab" data-tab="game" onclick="ScoreboardEngine.switchTab('game')">🎮 遊戲排行</button>
+    </div>
+    <div id="gameSelector">
+      <div class="game-select-chips" id="gameChips"></div>
+    </div>
+    <div id="rankingList"></div>
+  </div>
+</div>
+
+<!-- 底部 Tab Bar -->
+<div class="tab-bar">
+  <button class="tab-item active" data-tab="tabMap" onclick="switchTab('tabMap', this)">
+    <span class="tab-icon">🗺️</span>
+    <span>地圖</span>
+  </button>
+  <button class="tab-item" data-tab="tabGames" onclick="switchTab('tabGames', this)">
+    <span class="tab-icon">🎮</span>
+    <span>遊戲</span>
+  </button>
+  <button class="tab-item" data-tab="tabAdventure" onclick="switchTab('tabAdventure', this)">
+    <span class="tab-icon">🎢</span>
+    <span>冒險</span>
+  </button>
+  <button class="tab-item" data-tab="tabScore" onclick="switchTab('tabScore', this)">
+    <span class="tab-icon">🏆</span>
+    <span>排行</span>
+  </button>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/gps.js"></script>
+<script src="js/broadcast.js"></script>
+<script src="js/map-engine.js"></script>
+<script src="js/scoreboard-engine.js"></script>
+<script>
+  // 檢查登入
+  if (!Auth.requireLogin()) throw new Error('未登入');
+
+  const session = Auth.getSession();
+  document.getElementById('topBarTeam').textContent = `${session.teamEmoji} ${session.teamName}`;
+
+  // 初始化系統
+  AudioEngine.init();
+  API.init();
+  GPS.init();
+  Broadcast.init();
+
+  // GPS 狀態更新
+  GPS.onUpdate((pos) => {
+    const dot = document.getElementById('gpsDot');
+    const text = document.getElementById('gpsText');
+    if (pos.accuracy <= CONFIG.GPS.accuracyThreshold) {
+      dot.className = 'gps-dot active';
+      text.textContent = `±${Math.round(pos.accuracy)}m`;
+    } else {
+      dot.className = 'gps-dot warning';
+      text.textContent = `精度 ${Math.round(pos.accuracy)}m`;
+    }
+  });
+
+  // 繪製簡易樂園地圖背景
+  function drawMapBackground() {
+    const canvas = document.getElementById('mapBgCanvas');
+    const w = 1080, h = 1920;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    // 草地底色
+    ctx.fillStyle = '#C8E6C9';
+    ctx.fillRect(0, 0, w, h);
+
+    // 道路
+    ctx.strokeStyle = '#E0E0E0';
+    ctx.lineWidth = 40;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // 主環路
+    ctx.beginPath();
+    ctx.moveTo(200, 300); ctx.lineTo(540, 200); ctx.lineTo(880, 350);
+    ctx.lineTo(900, 800); ctx.lineTo(700, 1100); ctx.lineTo(540, 1300);
+    ctx.lineTo(300, 1200); ctx.lineTo(180, 900); ctx.lineTo(200, 500);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = '#F5F5F5';
+    ctx.fill();
+
+    // 支線
+    ctx.beginPath();
+    ctx.moveTo(540, 200); ctx.lineTo(540, 600);
+    ctx.moveTo(540, 800); ctx.lineTo(540, 1300);
+    ctx.moveTo(300, 700); ctx.lineTo(700, 700);
+    ctx.stroke();
+
+    // 裝飾：草叢
+    ctx.fillStyle = '#81C784';
+    for (let i = 0; i < 30; i++) {
+      const cx = Math.random() * w;
+      const cy = Math.random() * h;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 20 + Math.random() * 30, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 水池
+    ctx.fillStyle = '#81D4FA';
+    ctx.beginPath();
+    ctx.ellipse(540, 950, 120, 60, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 標題
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.font = 'bold 48px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('六福村主題遊樂園', w / 2, h - 60);
+
+    // 區域標示
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.font = 'bold 28px "Noto Sans TC", sans-serif';
+    ctx.fillText('非洲部落', 300, 450);
+    ctx.fillText('美國大西部', 750, 500);
+    ctx.fillText('南太平洋', 540, 1050);
+    ctx.fillText('阿拉伯皇宮', 350, 1400);
+  }
+
+  // 初始化地圖
+  drawMapBackground();
+  MapEngine.init('mapContainer');
+
+  // 遊戲列表
+  function renderGameList() {
+    const list = document.getElementById('gameList');
+    const unlocks = MapEngine.unlocked;
+
+    list.innerHTML = '<h2 style="font-size:18px;margin-bottom:16px;padding-top:8px;">🎮 數位闖關遊戲</h2>' +
+      CONFIG.GAMES.map(game => {
+        const isUnlocked = unlocks.has(game.id);
+        const dist = GPS.distanceTo(game.location.lat, game.location.lng);
+        const distText = dist < Infinity ? GPS.formatDistance(dist) : '定位中';
+
+        return `
+          <div class="game-card" onclick="${isUnlocked ? `window.location.href='game.html?id=${game.id}'` : 'alert("請先到地圖上靠近旗幟位置解鎖")'}" style="border-left:4px solid ${game.color}">
+            <div class="game-card-icon">${game.icon}</div>
+            <div class="game-card-info">
+              <div class="game-card-name">${game.name}</div>
+              <div class="game-card-desc">${game.description}</div>
+            </div>
+            <div class="game-card-status ${isUnlocked ? 'unlocked' : 'locked'}">
+              ${isUnlocked ? '✅ 開始' : `🔒 ${distText}`}
+            </div>
+          </div>
+        `;
+      }).join('');
+  }
+
+  // 冒險任務列表
+  function renderAdventureList() {
+    const list = document.getElementById('adventureList');
+    list.innerHTML = '<h2 style="font-size:18px;margin-bottom:16px;padding-top:8px;">🎢 冒險任務</h2>' +
+      CONFIG.ADVENTURES.map(adv => {
+        const dist = GPS.distanceTo(adv.lat, adv.lng);
+        const distText = dist < Infinity ? GPS.formatDistance(dist) : '定位中';
+
+        return `
+          <div class="game-card" onclick="window.location.href='adventure.html?id=${adv.id}'">
+            <div class="game-card-icon">${adv.icon}</div>
+            <div class="game-card-info">
+              <div class="game-card-name">${adv.name}</div>
+              <div class="game-card-desc">${adv.requirePhoto ? '📸 拍攝團隊照片' : `⏱ 停留${adv.dwellSeconds}秒驗證`} · ${adv.points}分</div>
+            </div>
+            <div class="game-card-status locked">${distText}</div>
+          </div>
+        `;
+      }).join('');
+  }
+
+  // 排行榜遊戲選擇器
+  const chipsEl = document.getElementById('gameChips');
+  chipsEl.innerHTML = CONFIG.GAMES.map(g =>
+    `<div class="game-chip${g.id === 'snake' ? ' active' : ''}" data-game="${g.id}" onclick="selectGameChip(this,'${g.id}')">${g.icon} ${g.name}</div>`
+  ).join('');
+
+  function selectGameChip(el, gameId) {
+    document.querySelectorAll('.game-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    ScoreboardEngine.selectGame(gameId);
+  }
+
+  // 初始化排行榜
+  ScoreboardEngine.init();
+
+  // Tab 切換
+  function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+    AudioEngine.tapButton();
+
+    if (tabId === 'tabGames') renderGameList();
+    if (tabId === 'tabAdventure') renderAdventureList();
+  }
+
+  // 定期更新遊戲列表距離
+  GPS.onUpdate(() => {
+    if (document.getElementById('tabGames').classList.contains('active')) renderGameList();
+    if (document.getElementById('tabAdventure').classList.contains('active')) renderAdventureList();
+  });
+
+  // 點擊畫面時恢復音效
+  document.addEventListener('touchstart', () => AudioEngine.resume(), { once: true });
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#FF6B35">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <title>遊戲 - 六福村動物嘉年華</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    body { background: #1a1a2e; }
+    .game-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+    }
+    .game-top-bar {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      position: relative;
+      z-index: 30;
+    }
+    .game-top-bar .back-btn {
+      font-size: 20px; border: none; background: none; color: white; cursor: pointer; padding: 8px;
+    }
+    .game-top-bar .game-title {
+      flex: 1; text-align: center; font-size: 17px; font-weight: 700;
+    }
+    .game-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      position: relative;
+    }
+
+    /* 遊戲說明畫面 */
+    .game-intro {
+      text-align: center; color: white; padding: 32px 24px;
+      animation: fadeIn 0.4s ease;
+    }
+    .game-intro-icon { font-size: 72px; margin-bottom: 16px; }
+    .game-intro-name { font-size: 28px; font-weight: 900; margin-bottom: 8px; }
+    .game-intro-desc { font-size: 15px; color: #ccc; margin-bottom: 24px; line-height: 1.6; }
+    .game-intro-rules { text-align: left; font-size: 13px; color: #aaa; margin-bottom: 24px; line-height: 1.8; }
+
+    /* 倒數���時 */
+    .countdown-display {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.8); z-index: 25;
+      font-size: 96px; font-weight: 900; color: var(--accent);
+      text-shadow: 0 4px 20px rgba(255,209,102,0.5);
+    }
+  </style>
+</head>
+<body>
+
+<div class="game-page">
+  <div class="game-top-bar">
+    <button class="back-btn" onclick="exitGame()">← 返回</button>
+    <div class="game-title" id="gameTitle">遊戲</div>
+    <div style="width:40px;"></div>
+  </div>
+
+  <div class="game-area" id="gameArea">
+    <!-- 動態載入遊戲內容 -->
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/audio.js"></script>
+<script>
+  if (!Auth.requireLogin()) throw new Error('未登入');
+  AudioEngine.init();
+  API.init();
+
+  const params = new URLSearchParams(window.location.search);
+  const gameId = params.get('id');
+  const game = getGameById(gameId);
+
+  if (!game) {
+    alert('找不到遊戲');
+    window.location.href = 'map.html';
+  }
+
+  document.getElementById('gameTitle').textContent = game.icon + ' ' + game.name;
+  document.title = game.name + ' - 六福村動物嘉年華';
+
+  // === 共用遊戲框架 ===
+  const GameFramework = {
+    state: 'intro', // intro, countdown, playing, ended
+    score: 0,
+    combo: 0,
+    maxCombo: 0,
+    timeLeft: game.duration,
+    timer: null,
+    canvas: null,
+    ctx: null,
+    animFrame: null,
+
+    showIntro() {
+      const area = document.getElementById('gameArea');
+      area.innerHTML = `
+        <div class="game-intro">
+          <div class="game-intro-icon">${game.icon}</div>
+          <div class="game-intro-name">${game.name}</div>
+          <div class="game-intro-desc">${game.description}</div>
+          <button class="btn btn-accent btn-lg btn-block" onclick="GameFramework.startCountdown()">
+            🎮 開始遊戲
+          </button>
+        </div>
+      `;
+    },
+
+    startCountdown() {
+      this.state = 'countdown';
+      const area = document.getElementById('gameArea');
+      area.innerHTML = `
+        <div class="game-canvas-container" id="canvasContainer">
+          <canvas id="gameCanvas"></canvas>
+          <div class="game-hud">
+            <div class="game-score-display" id="hudScore">0</div>
+            <div class="game-timer" id="hudTimer">${game.duration || '∞'}</div>
+          </div>
+          <div class="countdown-display" id="countdownDisplay">3</div>
+        </div>
+      `;
+
+      this.canvas = document.getElementById('gameCanvas');
+      const container = document.getElementById('canvasContainer');
+      this.canvas.width = container.clientWidth * 2;
+      this.canvas.height = container.clientHeight * 2;
+      this.ctx = this.canvas.getContext('2d');
+
+      let count = 3;
+      const cd = document.getElementById('countdownDisplay');
+      const countInterval = setInterval(() => {
+        AudioEngine.countdown();
+        count--;
+        if (count > 0) {
+          cd.textContent = count;
+        } else {
+          clearInterval(countInterval);
+          cd.textContent = 'GO!';
+          AudioEngine.countdownGo();
+          setTimeout(() => {
+            cd.remove();
+            this.startGame();
+          }, 500);
+        }
+      }, 800);
+    },
+
+    startGame() {
+      this.state = 'playing';
+      this.score = 0;
+      this.combo = 0;
+      this.maxCombo = 0;
+      this.timeLeft = game.duration;
+      AudioEngine.gameStart();
+
+      // 啟動計時器
+      if (game.duration > 0) {
+        this.timer = setInterval(() => {
+          this.timeLeft--;
+          document.getElementById('hudTimer').textContent = this.timeLeft;
+          if (this.timeLeft <= 3 && this.timeLeft > 0) AudioEngine.timerTick();
+          if (this.timeLeft <= 0) this.endGame();
+        }, 1000);
+      }
+
+      // 啟動遊戲邏輯 (由各遊戲 JS 實作)
+      if (typeof GameLogic !== 'undefined' && GameLogic.start) {
+        GameLogic.start(this.canvas, this.ctx, this);
+      }
+    },
+
+    addScore(points) {
+      this.score += points;
+      document.getElementById('hudScore').textContent = this.score;
+      AudioEngine.scoreUp();
+    },
+
+    addCombo() {
+      this.combo++;
+      if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+      if (this.combo > 1) {
+        AudioEngine.comboHit(this.combo);
+        this.showComboText(this.combo);
+      }
+    },
+
+    breakCombo() {
+      if (this.combo > 2) AudioEngine.comboBroken();
+      this.combo = 0;
+    },
+
+    showComboText(n) {
+      const el = document.createElement('div');
+      el.className = 'game-combo';
+      el.textContent = n + ' COMBO!';
+      document.getElementById('canvasContainer').appendChild(el);
+      setTimeout(() => el.remove(), 600);
+    },
+
+    endGame() {
+      if (this.state === 'ended') return;
+      this.state = 'ended';
+      if (this.timer) clearInterval(this.timer);
+      if (this.animFrame) cancelAnimationFrame(this.animFrame);
+      if (typeof GameLogic !== 'undefined' && GameLogic.stop) GameLogic.stop();
+
+      AudioEngine.gameEnd();
+      this.showResult();
+      this.submitScore();
+    },
+
+    showResult() {
+      const container = document.getElementById('canvasContainer');
+      const overlay = document.createElement('div');
+      overlay.className = 'game-result-overlay';
+      overlay.innerHTML = `
+        <div class="game-result-label">最終分數</div>
+        <div class="game-result-score">${this.score}</div>
+        <div class="game-result-rank">最高連擊: ${this.maxCombo}</div>
+        <button class="btn btn-accent btn-lg" onclick="GameFramework.restart()" style="margin:8px;">
+          🔄 再玩一次
+        </button>
+        <button class="btn btn-outline btn-lg" onclick="exitGame()" style="margin:8px;color:white;border-color:white;">
+          🗺️ 返回地圖
+        </button>
+      `;
+      container.appendChild(overlay);
+    },
+
+    async submitScore() {
+      const session = Auth.getSession();
+      try {
+        await API.post('WRITE', {
+          action: 'submitScore',
+          playerId: session.playerId,
+          playerName: session.name,
+          teamId: session.teamId,
+          gameId: gameId,
+          score: this.score
+        });
+      } catch { /* 佇列重試 */ }
+    },
+
+    restart() {
+      this.showIntro();
+    }
+  };
+
+  function exitGame() {
+    if (GameFramework.state === 'playing') {
+      if (!confirm('確定要離開遊戲嗎？')) return;
+    }
+    if (GameFramework.timer) clearInterval(GameFramework.timer);
+    if (GameFramework.animFrame) cancelAnimationFrame(GameFramework.animFrame);
+    window.location.href = 'map.html';
+  }
+
+  // 載入對應遊戲 JS
+  const script = document.createElement('script');
+  script.src = `js/games/${gameId}.js`;
+  script.onload = () => GameFramework.showIntro();
+  script.onerror = () => {
+    GameFramework.showIntro();
+  };
+  document.body.appendChild(script);
+
+  document.addEventListener('touchstart', () => AudioEngine.resume(), { once: true });
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+
+</body>
+</html>

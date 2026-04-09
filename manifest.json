@@ -1,0 +1,25 @@
+{
+  "name": "六福村動物嘉年華",
+  "short_name": "動物嘉年華",
+  "description": "六福村600人團隊闖關活動系統",
+  "start_url": "/leofoo-carnival/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FF6B35",
+  "theme_color": "#FF6B35",
+  "lang": "zh-TW",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
